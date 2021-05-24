@@ -1,0 +1,366 @@
+---
+title: "PSY6422"
+author: "Julia Tejeda"
+date: "5/24/2021"
+output: html_document
+---
+
+
+**Background**
+
+Evidence suggests that choice causes an illusion of control and that people feel more likely to achieve preferable outcomes even when the options are functionally identical (Langer, 1975).  Lottery tickets are often used to demonstrate how choice can cause an illusion of control. For instance, each ticket in a lottery have the same probability of being selected. This selection process occurs randomly. Nonetheless, it has been demonstrated that having a choice creates an "illusory sense" that drives a person to believe that their chosen lottery ticket contains the winning numbers (Langer, 1975). 
+Klusowski et al. (2021) claim that, on the contrary, many other alternatives could lead a person to choose a specific option. Precisely, the authors believe that choice reflects people's pre-existing beliefs rather than an illusion of control.  But what if, instead, a person's preexisting beliefs cause an illusion of control, and this is what drives a person to make a choice? How does the level of education impact that illusion of control?
+
+**Research questions**
+
+Therefore, this project aims to analyze in R if 1) preexisting believes causes an illusion of control, which drives a person to feel confident about making that specific choice. Also, if 2) the more level of education a person has, the least likely preexisting beliefs cause an illusion of control when making a choice.
+
+**Data origins**
+
+The dataset for this project was taken from the paper “Does Choice Cause an Illusion of Control?”  by Joowon Klusowski, Deborah A. Small, and Joseph P. Simmons (2021). The dataset chosen for this project was from experiment 17, which is very extensive. Only a few variables were included to analyze, which also includes other sociodemographic variables such as education, age, and gender, as shown below: 
+
+
+```{r, message=FALSE, echo=FALSE}
+#Load and enable the data packages
+
+library("tidyverse")
+library("corrplot") # this packages is used to do the correlation plot
+library("psych") # allows the summary of the statistics
+library("lm.beta")  #package used to do the regression. 
+library("plotly") #package used to convert a graph into a interactive animated visualization 
+library("ggpubr") #package to use and to add stats p-value to the graph
+
+```
+
+
+```{r, message=FALSE}
+
+# 2.Load the data
+
+library(readr)
+
+mydata <- read_csv("data.csv")
+
+```
+
+```{r, echo=FALSE, message=FALSE}
+#Clean data
+
+df <- mydata %>% select( p_highest, confidence2, p_selected, age, 
+                           gender, education, likelihood,
+                           Finished, ResponseId, choice_tertiary) %>% 
+  filter(age < 70, Finished == 1)
+
+
+```
+
+```{r}
+# Clean data 
+
+db <- df %>% mutate(ResponseId, p_selected, p_highest, likelihood,
+                              confidence2, age, gender, education, 
+                              choice_tertiary)
+
+head(db, 5)
+
+```
+
+
+The meaning of the variables used for this project can be found in the codebook to the Github. Similarly, to see the original experimental design, refer to this link for the [paper](https://journals.sagepub.com/doi/pdf/10.1177/0956797620958009) and for the dataset [here](https://osf.io/g2cbe/). 
+
+
+**_Data preparation_**
+
+```{r}
+
+#3.Run Data analysis
+
+#3.1. Rename the variables to group them in the data frame
+
+ID <- rep(db$ResponseId)
+Confidence<- rep(db$confidence2)
+Age <-rep(db$age)
+Gender<-rep(db$gender)
+Selection <- rep(db$p_selected)
+Probability <- rep(db$p_highest)
+Groups <- rep(db$choice_tertiary) #choice condition (pre_ choice=, post choice=, post_no_choice=)
+Education <- rep(db$education) # 1: no high school degree; 2: high school degree; 3: associate's degree; 4: bachelor's degree; 5: graduate degree (e.g., master's, Ph.D.)
+
+#3.2. Group all the variables as data.frame: 
+
+dat <- data.frame(Probability= Probability, Groups=Groups, 
+                  Selection= Selection, Age= Age, Gender= Gender,
+                  Education=Education, Confidence=Confidence)
+
+head(dat, 5)
+
+```
+
+```{r, echo=FALSE, message=FALSE}
+# 3.3. Standardize the variables to do lineal regression  
+mad <- lm(scale(Selection) ~ scale(Probability), data=dat)
+coef_lmbeta <- lm.beta(mad)
+
+sv <- lapply(dat, scale) # this is to standardize all the variables
+
+```
+
+
+_Calculate summary statistics for the variables_
+
+```{r}
+
+describe(dat) 
+
+```
+
+```{r, echo=FALSE, message=FALSE}
+
+#4. Visualisation
+
+#Calculate the regression
+
+# Specify and create different sub-group for the variables education, Groups and equal
+
+dat$Groups<- as.factor(dat$Groups)#to divide the groups into groups two groups
+Groups <- dat$Groups 
+
+dat$Education<- as.factor(dat$Education) #to divide the education into subgroups that shows the level of education. 
+Education <- dat$Education
+
+dat$equal<- ifelse(dat$Selection==dat$Probability,1,0) #to show if both have equal probability 
+Equal <- dat$equal
+
+#Replace numeric levels for character where 1: no high school degree; 2: high school degree; 3: associate's degree; 4: bachelor's degree; 5: graduate degree (e.g., master's, Ph.D.)
+grad <- c ("No High School", "High School degree", "Associate's degree", 
+           "Undergraduate degree", "Postgraduate degree (PhD, Masters)")
+
+Ed <- Education
+
+Ed <- factor(Ed, labels=grad)
+
+education = Ed
+
+#Replace numeric levels for the condition groups where 0= pre-choice, 1= Post-choice and 2=Post-no-choice.
+
+cond <- c ("pre-choice", "Post-choice", "Post-no-choice")
+gc <- Groups
+
+gc <- factor(gc, labels = cond)
+
+
+# To change the binary variable 0 & 1, as factor:
+
+dat$BoxSelected<- ifelse(dat$equal==1, "Highest probability", 
+                         "Lower probability")
+SelectedBox <- dat$BoxSelected
+
+```
+
+_Calculate statistical analysis using OLS regression_
+
+```{r, message=FALSE, warning=FALSE}
+
+#Ordinary least squares (OLS) regression
+
+m1 <- lm(Confidence~Equal + Age + Groups + Education + Gender, data= dat)
+summary(m1)
+```
+**Visualisation**
+
+```{r, warning=FALSE}
+
+p <- ggplot(data=dat, aes(x= Education, y= Confidence, colour = education)) +
+  geom_boxplot(aes(frame= gc)) + 
+  labs( title = "Does preexisting beliefs cause an illusion of control?") + 
+  xlab("Level of Education") +
+  ylab("Level of Confidence") 
+
+#Plot interactive animated visualization
+
+ggplotly(p)
+
+```
+
+**_Results and Summary_**
+
+The presented data analysis and visualization showed that age, gender and Groups (Pre-Choice, Post-Choice and Post-No Choice) are not statistically significant to determine the illusion of control (confidence that your box will win).
+
+Furthermore, the results show that people with no education tend to have less confidence than those with education. Nevertheless, higher education does not necessarily mean more confidence. For instance, Undergraduates and Postgraduates, on average, have less confidence on their selected box than high school and associate degree holders. 
+
+Although the authors of this article managed to cover the relation between choice and preexisting beliefs precisely, it was challenging to decide which variables were needed to adequately represent and analyze the hypothesis. Therefore, it would be interesting to plan other alternatives of experimental design and statistical methodology to collect and analyze the data. 
+
+For further studies, it would be of great interest to visualize the correlation between preexisting beliefs that causes an illusion of control with both age and gender, as well as with the winning box to see the accuracy of their selection. 
+
+**_Reference_**
+
+Langer, E. J. (1975). The illusion of control. Journal of Personality and Social Psychology, 32, 311–328. 
+
+Klusowski, J., Small, D. A., & Simmons, J. P. (2021). Does Choice Cause an Illusion of Control?. Psychological Science, 32(2), 159-172.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
